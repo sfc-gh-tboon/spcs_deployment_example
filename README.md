@@ -123,24 +123,16 @@ spcs_deployment_example/
 │   ├── main.py                  FastAPI writeback route function
 │   └── requirements.txt         Python dependencies (FastAPI, Uvicorn, snowflake-connector-python)
 ├── scripts/
-│   ├── config.ps1               Shared config - prompts, logging, helpers
-│   ├── deploy_all.ps1           Full deployment orchestrator (10 steps)
-│   ├── cleanup.ps1              Teardown all objects
-│   ├── step_01_image_repo.ps1   Create image repository
-│   ├── step_02_compute_pool.ps1 Create compute pool + wait for ACTIVE
-│   ├── step_03_network_rule.ps1 Create network egress rule (uses TARGET_HOSTS)
-│   ├── step_04_secret.ps1       Create secret (API token)
-│   ├── step_05_ext_access.ps1   Create external access integration
-│   ├── step_06_build_image.ps1  Build Docker image (linux/amd64)
-│   ├── step_07_push_image.ps1   Push image to Snowflake registry
-│   ├── step_08_service.ps1      Create SPCS service (runs as SERVICE_ROLE)
-│   ├── step_09_function.ps1     Create SQL function + grant to SERVICE_ROLE
-│   └── step_10_test.ps1         Run connectivity + batch tests
-├── scripts/sh/                      Bash equivalents for macOS / Linux
-│   ├── config.sh                Same config + helpers (requires jq)
-│   ├── deploy_all.sh            Full deployment orchestrator
-│   ├── cleanup.sh               Teardown all objects
-│   └── step_01..step_10_*.sh    Same steps as PowerShell versions
+│   ├── ps/                          PowerShell scripts (Windows)
+│   │   ├── config.ps1               Shared config - prompts, logging, helpers
+│   │   ├── deploy_all.ps1           Full deployment orchestrator (10 steps)
+│   │   ├── cleanup.ps1              Teardown all objects
+│   │   └── step_01..step_10_*.ps1   Individual deployment steps
+│   └── sh/                          Bash scripts (macOS / Linux, requires jq)
+│       ├── config.sh                Shared config + helpers
+│       ├── deploy_all.sh            Full deployment orchestrator
+│       ├── cleanup.sh               Teardown all objects
+│       └── step_01..step_10_*.sh    Individual deployment steps
 ├── Dockerfile                   Container build definition (Uvicorn on port 8000)
 ├── logs/                        Deployment logs (git-ignored)
 ├── service_spec.template.yaml   Service spec template (edit this for customization)
@@ -178,13 +170,13 @@ Run from the **project root directory**:
 
 ```powershell
 cd path/to/spcs_deployment_example
-.\scripts\deploy_all.ps1
+.\scripts\ps\deploy_all.ps1
 ```
 
 Individual steps can also be run standalone:
 
 ```powershell
-.\scripts\step_03_network_rule.ps1
+.\scripts\ps\step_03_network_rule.ps1
 ```
 
 ### macOS / Linux (Bash)
@@ -250,7 +242,7 @@ $env:SERVICE_ROLE = "WRITEBACK_ROLE"
 $env:WRITEBACK_DB_NAME = "MY_DB"
 $env:WRITEBACK_SCHEMA_NAME = "MY_SCHEMA"
 $env:WRITEBACK_WAREHOUSE = "WH_XS"
-.\scripts\deploy_all.ps1
+.\scripts\ps\deploy_all.ps1
 ```
 
 Or on macOS/Linux:
@@ -289,7 +281,7 @@ Note: Step 8 uses `IF NOT EXISTS`, so re-running won't update a running service.
 To update the service spec (e.g., new image tag), drop it first or use
 `ALTER SERVICE ... FROM SPECIFICATION`.
 
-Each step can be run independently: `.\scripts\step_03_network_rule.ps1`
+Each step can be run independently: `.\scripts\ps\step_03_network_rule.ps1`
 
 ### Optional steps: Outbound network access (steps 3-5)
 
@@ -305,14 +297,14 @@ unused objects). To skip them:
 
 ```powershell
 # Run only the required steps
-.\scripts\step_01_image_repo.ps1
-.\scripts\step_02_compute_pool.ps1
+.\scripts\ps\step_01_image_repo.ps1
+.\scripts\ps\step_02_compute_pool.ps1
 # Skip steps 3, 4, 5
-.\scripts\step_06_build_image.ps1
-.\scripts\step_07_push_image.ps1
-.\scripts\step_08_service.ps1
-.\scripts\step_09_function.ps1
-.\scripts\step_10_test.ps1
+.\scripts\ps\step_06_build_image.ps1
+.\scripts\ps\step_07_push_image.ps1
+.\scripts\ps\step_08_service.ps1
+.\scripts\ps\step_09_function.ps1
+.\scripts\ps\step_10_test.ps1
 ```
 
 If you skip these steps, also remove the `EXTERNAL_ACCESS_INTEGRATIONS` clause
@@ -458,7 +450,7 @@ Or drop and recreate:
 # Drop the service first (step 08 uses IF NOT EXISTS, so it won't update in-place)
 snow sql --connection $env:SNOWFLAKE_CONNECTION --query "USE ROLE $env:SERVICE_ROLE; DROP SERVICE IF EXISTS $env:DB.$env:SCHEMA.${env:SERVICE_NAME}_SERVICE;"
 # Then re-run step 08
-.\scripts\step_08_service.ps1
+.\scripts\ps\step_08_service.ps1
 ```
 
 See [ALTER SERVICE](https://docs.snowflake.com/en/sql-reference/sql/alter-service) for more options.
@@ -540,7 +532,7 @@ For any other issue, check the deployment log file at `logs/deploy_<service>_<ti
 ## Cleanup
 
 ```powershell
-.\scripts\cleanup.ps1
+.\scripts\ps\cleanup.ps1
 ```
 
 Or on macOS/Linux:

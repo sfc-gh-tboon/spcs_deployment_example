@@ -36,7 +36,7 @@ Write-Host "    [OK] Image repository exists: $repoUrl"
 $fullImage = "$repoUrl/${IMAGE_NAME}:${IMAGE_TAG}"
 Write-Host "`n    Full image path: $fullImage"
 
-$projectRoot = (Resolve-Path "$PSScriptRoot\..").Path
+$projectRoot = (Resolve-Path "$PSScriptRoot\..\..").Path
 
 Write-Host "`n==> Building image (platform: linux/amd64)..."
 Write-Host "    This may take a few minutes on first run."

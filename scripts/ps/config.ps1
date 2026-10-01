@@ -104,7 +104,7 @@ $WRITEBACK_WAREHOUSE   = Get-Config "WRITEBACK_WAREHOUSE" "Writeback warehouse" 
 $DEBUG_MODE            = Get-Config "DEBUG_MODE" "Enable debug logging in the service (true/false)" "false"
 
 # --- Logging ---
-$LOG_DIR = Join-Path $PSScriptRoot "..\logs"
+$LOG_DIR = Join-Path $PSScriptRoot "..\..\logs"
 if (-not (Test-Path $LOG_DIR)) { New-Item -ItemType Directory -Path $LOG_DIR | Out-Null }
 if (-not $script:LOG_FILE) {
     $script:LOG_FILE = Join-Path $LOG_DIR "deploy_${SERVICE_NAME}_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"

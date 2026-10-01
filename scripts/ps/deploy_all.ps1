@@ -2,7 +2,7 @@
 # DEPLOY ALL - Run all deployment steps in order
 # =============================================================================
 # Usage:
-#   .\scripts\deploy_all.ps1
+#   .\scripts\ps\deploy_all.ps1
 #
 # To skip prompts, set environment variables:
 #   $env:SNOWFLAKE_CONNECTION = "myconn"

@@ -37,7 +37,7 @@ $fullImage = "$repoUrl/${IMAGE_NAME}:${IMAGE_TAG}"
 Write-Host "    [OK] Image path: $fullImage"
 
 # --- Generate service.yaml from template ---
-$templatePath = Join-Path $PSScriptRoot "..\service_spec.template.yaml"
+$templatePath = Join-Path $PSScriptRoot "..\..\service_spec.template.yaml"
 if (-not (Test-Path $templatePath)) {
     Write-Host "ERROR: Template not found at $templatePath"
     Write-Host "       Expected: service_spec.template.yaml in project root."
@@ -61,7 +61,7 @@ $spec = $spec.Replace('{{WRITEBACK_SCHEMA_NAME}}', $WRITEBACK_SCHEMA_NAME)
 $spec = $spec.Replace('{{WRITEBACK_WAREHOUSE}}', $WRITEBACK_WAREHOUSE)
 $spec = $spec.Replace('{{DEBUG_MODE}}', $DEBUG_MODE)
 
-$yamlPath = Join-Path $PSScriptRoot "..\service.yaml"
+$yamlPath = Join-Path $PSScriptRoot "..\..\service.yaml"
 [System.IO.File]::WriteAllText($yamlPath, $spec)
 Write-Host "    Resolved spec saved to: $(Resolve-Path $yamlPath)"
 
