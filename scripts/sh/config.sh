@@ -190,6 +190,15 @@ invoke_snow_sql() {
     fi
 
     write_log "SQL OK (exit=$exit_code)"
+
+    # When multiple statements are sent (e.g. "USE ROLE ...; SELECT ..."),
+    # snow --format json wraps each result in its own array, producing a
+    # nested array like [[{...}], [{...}]].  Callers expect a flat array
+    # [{...}], so extract the last result set (the actual query output).
+    if echo "$output" | jq -e 'if type == "array" and (.[0] | type) == "array" then true else false end' >/dev/null 2>&1; then
+        output=$(echo "$output" | jq '.[-1]')
+    fi
+
     echo "$output"
     return 0
 }
