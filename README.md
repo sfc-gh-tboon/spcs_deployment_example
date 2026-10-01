@@ -238,9 +238,9 @@ $env:WRITEBACK_WAREHOUSE = "WH_XS"
 |------|-------------|-----------|-------------|
 | 1 | Create image repository | `$ROLE` | IF NOT EXISTS (skips) |
 | 2 | Create compute pool, wait for ACTIVE | `$ROLE` | IF NOT EXISTS (skips) |
-| 3 | Create network rule (from TARGET_HOSTS) | `$ROLE` | OR REPLACE (updates) |
-| 4 | Create secret | `$ROLE` | IF NOT EXISTS (skips) |
-| 5 | Create external access integration | `$ADMIN_ROLE` | OR REPLACE (updates) |
+| 3 | *(optional)* Create network rule (from TARGET_HOSTS) | `$ROLE` | OR REPLACE (updates) |
+| 4 | *(optional)* Create secret | `$ROLE` | IF NOT EXISTS (skips) |
+| 5 | *(optional)* Create external access integration | `$ADMIN_ROLE` | OR REPLACE (updates) |
 | 6 | Build Docker image (linux/amd64) | -- | Rebuilds layers |
 | 7 | Push image to Snowflake registry | -- | Overwrites tag |
 | 8 | Create SPCS service, generate service.yaml | `$SERVICE_ROLE` | IF NOT EXISTS (skips) |
@@ -255,6 +255,33 @@ To update the service spec (e.g., new image tag), drop it first or use
 `ALTER SERVICE ... FROM SPECIFICATION`.
 
 Each step can be run independently: `.\scripts\step_03_network_rule.ps1`
+
+### Optional steps: Outbound network access (steps 3-5)
+
+Steps 3, 4, and 5 create a network rule, secret, and external access integration.
+These are **only needed if your writeback stored procedures make outbound calls**
+to external APIs (e.g., calling a third-party webhook after writing data). The
+core writeback routing service does not require outbound access -- it connects
+back to Snowflake using the SPCS OAuth token, which is mounted automatically.
+
+If you do not need outbound access, you can safely skip these steps when running
+individually, or leave them in `deploy_all.ps1` (they are harmless but create
+unused objects). To skip them:
+
+```powershell
+# Run only the required steps
+.\scripts\step_01_image_repo.ps1
+.\scripts\step_02_compute_pool.ps1
+# Skip steps 3, 4, 5
+.\scripts\step_06_build_image.ps1
+.\scripts\step_07_push_image.ps1
+.\scripts\step_08_service.ps1
+.\scripts\step_09_function.ps1
+.\scripts\step_10_test.ps1
+```
+
+If you skip these steps, also remove the `EXTERNAL_ACCESS_INTEGRATIONS` clause
+from the `CREATE SERVICE` command in `step_08_service.ps1`.
 
 ---
 
