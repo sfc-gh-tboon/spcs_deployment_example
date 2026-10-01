@@ -4,7 +4,7 @@
 $tokenValue = [Environment]::GetEnvironmentVariable("API_SECRET")
 if (-not $tokenValue) { $tokenValue = $script:ConfigCache["API_SECRET"] }
 if (-not $tokenValue) {
-    $input = Read-Host "API bearer token [dummy-token-for-testing]"
+    $input = Read-Host "External access token (for outbound calls) [dummy-token-for-testing]"
     $tokenValue = if ($input) { $input } else { "dummy-token-for-testing" }
     $script:ConfigCache["API_SECRET"] = $tokenValue
 }
@@ -27,13 +27,13 @@ if ($secrets -and $secrets.Count -gt 0) {
 
 Write-Host "`n==> Creating secret $SECRET_NAME..."
 if ($tokenValue -eq "dummy-token-for-testing") {
-    Write-Host "    Using DUMMY token value (set API_SECRET env var for real token)"
+    Write-Host "    Using DUMMY token value (set API_SECRET env var for a real token)"
 } else {
     Write-Host "    Using provided token value"
 }
 
 $safeTokenValue = $tokenValue -replace "'", "''"
-Invoke-SnowSqlDisplay "USE ROLE $ROLE; USE SCHEMA $DB.$SCHEMA; CREATE SECRET IF NOT EXISTS $SECRET_NAME TYPE = GENERIC_STRING SECRET_STRING = '$safeTokenValue' COMMENT = 'API bearer token for the $SERVICE_NAME proxy service';"
+Invoke-SnowSqlDisplay "USE ROLE $ROLE; USE SCHEMA $DB.$SCHEMA; CREATE SECRET IF NOT EXISTS $SECRET_NAME TYPE = GENERIC_STRING SECRET_STRING = '$safeTokenValue' COMMENT = 'External access token for the $SERVICE_NAME writeback service';"
 
 if ($SERVICE_ROLE -ne $ROLE) {
     Write-Host "`n==> Granting READ on $SECRET_NAME to $SERVICE_ROLE..."

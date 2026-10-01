@@ -13,7 +13,9 @@
 #   $env:SERVICE_ROLE = "MY_SERVICE_ROLE"  (role the service runs as)
 #   $env:TARGET_HOSTS = "api.example.com,api2.example.com"  (allowed egress hosts)
 #   $env:IMAGE_TAG = "latest"
-#   $env:API_SECRET = "your-token-here"
+#   $env:WRITEBACK_DB_NAME = "MY_DB"       (database the writeback procedures live in)
+#   $env:WRITEBACK_SCHEMA_NAME = "MY_SCHEMA"  (schema the writeback procedures live in)
+#   $env:WRITEBACK_WAREHOUSE = "MY_WH"     (warehouse for writeback procedure calls)
 # =============================================================================
 
 function Get-Config {
@@ -90,8 +92,16 @@ $SECRET_NAME   = "${SVC_UPPER}_API_TOKEN"
 $EAI_NAME      = "${SVC_UPPER}_API_ACCESS_INTEGRATION"
 $SERVICE_OBJ    = "${SVC_UPPER}_SERVICE"
 $CONTAINER_NAME = $SERVICE_NAME.ToLower()
-$ENDPOINT_NAME  = "proxy"
-$FUNCTION_NAME  = "FETCH_${SVC_UPPER}_RESPONSE"
+$ENDPOINT_NAME  = "route"
+$FUNCTION_NAME  = "ROUTE_${SVC_UPPER}_WRITEBACK"
+
+# Writeback target configuration (the database/schema/warehouse the procedures live in)
+$WRITEBACK_DB_NAME     = Get-Config "WRITEBACK_DB_NAME" "Writeback target database" $DB
+$WRITEBACK_SCHEMA_NAME = Get-Config "WRITEBACK_SCHEMA_NAME" "Writeback target schema" $SCHEMA
+$WRITEBACK_WAREHOUSE   = Get-Config "WRITEBACK_WAREHOUSE" "Writeback warehouse" "WH_XS"
+
+# Debug mode (set to "true" to enable verbose logging in the container)
+$DEBUG_MODE            = Get-Config "DEBUG_MODE" "Enable debug logging in the service (true/false)" "false"
 
 # --- Logging ---
 $LOG_DIR = Join-Path $PSScriptRoot "..\logs"
@@ -116,6 +126,8 @@ Write-Log "DB=$DB  SCHEMA=$SCHEMA"
 Write-Log "ROLE=$ROLE  ADMIN_ROLE=$ADMIN_ROLE  SERVICE_ROLE=$SERVICE_ROLE"
 Write-Log "TARGET_HOSTS=$TARGET_HOSTS"
 Write-Log "IMAGE_TAG=$IMAGE_TAG"
+Write-Log "WRITEBACK_DB=$WRITEBACK_DB_NAME  WRITEBACK_SCHEMA=$WRITEBACK_SCHEMA_NAME  WRITEBACK_WH=$WRITEBACK_WAREHOUSE"
+Write-Log "DEBUG_MODE=$DEBUG_MODE"
 Write-Log "Derived: REPO=$REPO_NAME  POOL=$POOL_NAME  SERVICE=$SERVICE_OBJ  CONTAINER=$CONTAINER_NAME  ENDPOINT=$ENDPOINT_NAME  FUNCTION=$FUNCTION_NAME"
 
 # --- Pre-flight: check tools are available ---

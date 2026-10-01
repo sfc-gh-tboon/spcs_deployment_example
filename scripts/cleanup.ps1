@@ -4,7 +4,7 @@
 . "$PSScriptRoot\config.ps1"
 
 Write-Host "`n==========================================================================="
-Write-Host " SPCS API Proxy - Cleanup ($SERVICE_NAME)"
+Write-Host " SPCS Writeback Service - Cleanup ($SERVICE_NAME)"
 Write-Host "==========================================================================="
 Write-Host ""
 Write-Host " This will PERMANENTLY DROP the following objects:"

@@ -54,9 +54,12 @@ $spec = ($spec -split "`n" | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
 $spec = $spec.Replace('{{IMAGE}}', $fullImage)
 $spec = $spec.Replace('{{DB}}', $DB)
 $spec = $spec.Replace('{{SCHEMA}}', $SCHEMA)
-$spec = $spec.Replace('{{SECRET_NAME}}', $SECRET_NAME)
 $spec = $spec.Replace('{{CONTAINER_NAME}}', $CONTAINER_NAME)
 $spec = $spec.Replace('{{ENDPOINT_NAME}}', $ENDPOINT_NAME)
+$spec = $spec.Replace('{{WRITEBACK_DB_NAME}}', $WRITEBACK_DB_NAME)
+$spec = $spec.Replace('{{WRITEBACK_SCHEMA_NAME}}', $WRITEBACK_SCHEMA_NAME)
+$spec = $spec.Replace('{{WRITEBACK_WAREHOUSE}}', $WRITEBACK_WAREHOUSE)
+$spec = $spec.Replace('{{DEBUG_MODE}}', $DEBUG_MODE)
 
 $yamlPath = Join-Path $PSScriptRoot "..\service.yaml"
 [System.IO.File]::WriteAllText($yamlPath, $spec)

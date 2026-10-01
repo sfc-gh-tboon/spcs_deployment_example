@@ -1,5 +1,5 @@
 # =============================================================================
-# SPCS API Proxy Service - Dockerfile
+# SPCS Writeback Route Function - Dockerfile
 # =============================================================================
 # Build context: repo root
 # Target platform: linux/amd64  (required for SPCS)
@@ -7,9 +7,13 @@
 # Build:
 #   docker buildx build --platform linux/amd64 -t <registry>/my_service:latest .
 #
-# Run locally for testing (token passed as env var):
-#   docker run -p 8080:8080 \
-#     -e API_TOKEN="your-token-here" \
+# Run locally for testing (requires Snowflake env vars):
+#   docker run -p 8000:8000 \
+#     -e SNOWFLAKE_HOST="..." \
+#     -e SNOWFLAKE_ACCOUNT="..." \
+#     -e WRITEBACK_DB_NAME="..." \
+#     -e WRITEBACK_SCHEMA_NAME="..." \
+#     -e WRITEBACK_WAREHOUSE="..." \
 #     <registry>/my_service:latest
 # =============================================================================
 
@@ -30,15 +34,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 USER appuser
 
 # Port must match the endpoint port in the service spec
-EXPOSE 8080
+EXPOSE 8000
 
-# Gunicorn: production WSGI server
-#   --workers 4       : 4 processes; each maintains its own persistent HTTP session
-#   --timeout 60      : worker timeout; set above REQUEST_TIMEOUT_S (default 30s)
-#   --access-logfile - : route access logs to stdout so SPCS captures them
-CMD ["gunicorn", \
+# Uvicorn: production ASGI server
+#   --workers 4       : 4 processes for concurrent request handling
+#   --host 0.0.0.0    : bind to all interfaces so SPCS can reach the container
+#   --port 8000       : must match EXPOSE and service spec endpoint port
+CMD ["uvicorn", \
+     "main:app", \
      "--workers=4", \
-     "--bind=0.0.0.0:8080", \
-     "--timeout=60", \
-     "--access-logfile=-", \
-     "main:app"]
+     "--host=0.0.0.0", \
+     "--port=8000"]

@@ -7,12 +7,15 @@
 # the placeholders and pass the resolved spec to CREATE SERVICE.
 #
 # Available placeholders:
-#   {{IMAGE}}        - Full image path (registry/db/schema/repo/image:tag)
-#   {{DB}}           - Database name
-#   {{SCHEMA}}       - Schema name
-#   {{SECRET_NAME}}  - Secret object name (e.g. PRICING_API_TOKEN)
-#   {{CONTAINER_NAME}} - Container name (derived from service name, e.g. pricing)
-#   {{ENDPOINT_NAME}}  - Endpoint name and Flask route path (default: proxy)
+#   {{IMAGE}}              - Full image path (registry/db/schema/repo/image:tag)
+#   {{DB}}                 - Database name
+#   {{SCHEMA}}             - Schema name
+#   {{CONTAINER_NAME}}     - Container name (derived from service name)
+#   {{ENDPOINT_NAME}}      - Endpoint name and FastAPI route path (default: route)
+#   {{WRITEBACK_DB_NAME}}  - Database containing the writeback stored procedures
+#   {{WRITEBACK_SCHEMA_NAME}} - Schema containing the writeback stored procedures
+#   {{WRITEBACK_WAREHOUSE}}   - Warehouse used for writeback procedure calls
+#   {{DEBUG_MODE}}            - Set to "true" for verbose debug logging (default: "false")
 #
 # After deployment, the resolved spec is saved to service.yaml for reference.
 
@@ -21,12 +24,10 @@ spec:
     - name: "{{CONTAINER_NAME}}"
       image: "{{IMAGE}}"
       env:
-        TARGET_URL: "https://postman-echo.com/post"
-        REQUEST_TIMEOUT_S: "30"
-      secrets:
-        - snowflakeSecret:
-            objectName: "{{DB}}.{{SCHEMA}}.{{SECRET_NAME}}"
-          envVarName: API_TOKEN
+        WRITEBACK_DB_NAME: "{{WRITEBACK_DB_NAME}}"
+        WRITEBACK_SCHEMA_NAME: "{{WRITEBACK_SCHEMA_NAME}}"
+        WRITEBACK_WAREHOUSE: "{{WRITEBACK_WAREHOUSE}}"
+        DEBUG_MODE: "{{DEBUG_MODE}}"
       resources:
         requests:
           cpu: "0.5"
@@ -35,9 +36,9 @@ spec:
           cpu: "1"
           memory: 1Gi
       readinessProbe:
-        port: 8080
+        port: 8000
         path: /
   endpoints:
     - name: "{{ENDPOINT_NAME}}"
-      port: 8080
+      port: 8000
       public: false

@@ -24,23 +24,22 @@ $env:ADMIN_ROLE           = $ADMIN_ROLE
 $env:IMAGE_TAG            = $IMAGE_TAG
 $env:TARGET_HOSTS         = $TARGET_HOSTS
 $env:SERVICE_ROLE         = $SERVICE_ROLE
-
-# API_SECRET is prompted by step_04 separately from config.ps1.
-# Pre-prompt here so it's exported for the child process.
-if (-not $env:API_SECRET) {
-    $tokenInput = Read-Host "API bearer token [dummy-token-for-testing]"
-    $env:API_SECRET = if ($tokenInput) { $tokenInput } else { "dummy-token-for-testing" }
-}
+$env:WRITEBACK_DB_NAME    = $WRITEBACK_DB_NAME
+$env:WRITEBACK_SCHEMA_NAME = $WRITEBACK_SCHEMA_NAME
+$env:WRITEBACK_WAREHOUSE  = $WRITEBACK_WAREHOUSE
+$env:DEBUG_MODE           = $DEBUG_MODE
 
 Write-Host "`n==========================================================================="
-Write-Host " SPCS API Proxy - Full Deployment ($SERVICE_NAME)"
+Write-Host " SPCS Writeback Service - Full Deployment ($SERVICE_NAME)"
 Write-Host "==========================================================================="
 Write-Host ""
 Write-Host " Configuration:"
 Write-Host "   Service:    $SERVICE_NAME (objects: ${SERVICE_OBJ}, ${POOL_NAME}, ...)"
 Write-Host "   Connection: $SNOWFLAKE_CONNECTION"
 Write-Host "   Database:   $DB.$SCHEMA"
+Write-Host "   Writeback:  $WRITEBACK_DB_NAME.$WRITEBACK_SCHEMA_NAME (warehouse: $WRITEBACK_WAREHOUSE)"
 Write-Host "   Role:       $ROLE  (admin: $ADMIN_ROLE)"
+Write-Host "   Debug mode: $DEBUG_MODE"
 Write-Host "   Image tag:  $IMAGE_TAG"
 Write-Host ""
 Write-Host " Steps: image repo > compute pool > network rule > secret > EAI >"

@@ -1,57 +1,70 @@
-# SPCS API Proxy Service
+# SPCS Writeback Route Function
 
-A reusable template for deploying an external API proxy as a
+A reusable template for deploying a writeback routing service as a
 [**Snowpark Container Services (SPCS)**](https://docs.snowflake.com/en/developer-guide/snowpark-container-services/overview)
 service, callable from SQL via a
 [service function](https://docs.snowflake.com/en/developer-guide/snowpark-container-services/working-with-services#service-functions).
 
-Provide a service name (e.g., `pricing`, `weather`, `fraud`) and the scripts
-create all Snowflake objects automatically with consistent naming.
+The service receives JSON payloads containing a `productCode`, maps each code to
+the correct Snowflake stored procedure group, and dispatches the call on a
+background thread. The HTTP response returns immediately with an `ACCEPTED` or
+`FAILURE` status so the calling query is not blocked.
+
+Provide a service name (e.g., `writeback`, `routing`) and the scripts create all
+Snowflake objects automatically with consistent naming.
 
 ---
 
-## Why SPCS instead of a Python UDF?
-
-| | Python UDF | SPCS Service (this repo) |
-|---|---|---|
-| Cold start | 2-8 s (Conda env setup) | ~0 ms (container already running) |
-| HTTP connection pooling | Per-sandbox, not guaranteed | True persistent pool per worker |
-| Latency (warm) | ~300-600 ms | ~50-150 ms |
-| Token rotation | Requires UDF recreation | `ALTER SECRET` + container restart |
-| Debugging | Event table only | Container logs via `SYSTEM$GET_SERVICE_LOGS` |
-
----
-
-## Architecture
+## How It Works
 
 ```
 SQL caller  (using SERVICE_ROLE or any granted role)
-    |  SELECT FETCH_<NAME>_RESPONSE(PARSE_JSON('{...}'))
+    |  SELECT ROUTE_<NAME>_WRITEBACK(PARSE_JSON('{...}'))
     v
 Service Function  (SQL -> HTTP bridge, owned by ROLE, granted to SERVICE_ROLE)
-    |  POST /proxy  {"data": [[0, {...}]]}
+    |  POST /route  {"data": [[0, {...}]]}
     v
-Flask container  (running as SERVICE_ROLE in SPCS compute pool)
-    |  POST to TARGET_URL (configurable via env var)
+FastAPI container  (running as SERVICE_ROLE in SPCS compute pool)
+    |  Looks up productCode -> stored procedure group
+    |  Dispatches CALL on a background thread
+    |  Returns ACCEPTED immediately
     v
-Target API  (external - allowed hosts defined by TARGET_HOSTS)
+Snowflake stored procedure  (USP_WRITEBACK_GROUP1-4)
+    |  Runs writeback logic inside the target database/schema
 ```
+
+---
+
+## Product Routing
+
+Each incoming payload must include a `productCode` field. The service maps it to
+the correct stored procedure:
+
+| Product Code | Procedure |
+|---|---|
+| FA, AG, DY, RL | `USP_WRITEBACK_GROUP1` |
+| NH, RF | `USP_WRITEBACK_GROUP2` |
+| CO, AK, AH | `USP_WRITEBACK_GROUP3` |
+| CI | `USP_WRITEBACK_GROUP4` |
+
+Unrecognized product codes return a `FAILURE` response inline. To add or move
+products, edit the `PRODUCT_TO_PROCEDURE` dictionary in `app/main.py`.
 
 ---
 
 ## Naming Convention
 
-When you enter a service name (e.g., `pricing`), all objects are derived:
+When you enter a service name (e.g., `writeback`), all objects are derived:
 
 | Object | Name |
 |---|---|
-| Image repository | `PRICING_REPO` |
-| [Compute pool](https://docs.snowflake.com/en/sql-reference/sql/create-compute-pool) | `PRICING_COMPUTE_POOL` |
-| [Network rule](https://docs.snowflake.com/en/sql-reference/sql/create-network-rule) | `PRICING_API_RULE` |
-| [Secret](https://docs.snowflake.com/en/sql-reference/sql/create-secret) | `PRICING_API_TOKEN` |
-| [External access integration](https://docs.snowflake.com/en/sql-reference/sql/create-external-access-integration) | `PRICING_API_ACCESS_INTEGRATION` |
-| [SPCS service](https://docs.snowflake.com/en/sql-reference/sql/create-service) | `PRICING_SERVICE` |
-| [SQL function](https://docs.snowflake.com/en/developer-guide/snowpark-container-services/working-with-services#service-functions) | `FETCH_PRICING_RESPONSE(VARIANT)` |
+| Image repository | `WRITEBACK_REPO` |
+| [Compute pool](https://docs.snowflake.com/en/sql-reference/sql/create-compute-pool) | `WRITEBACK_COMPUTE_POOL` |
+| [Network rule](https://docs.snowflake.com/en/sql-reference/sql/create-network-rule) | `WRITEBACK_API_RULE` |
+| [Secret](https://docs.snowflake.com/en/sql-reference/sql/create-secret) | `WRITEBACK_API_TOKEN` |
+| [External access integration](https://docs.snowflake.com/en/sql-reference/sql/create-external-access-integration) | `WRITEBACK_API_ACCESS_INTEGRATION` |
+| [SPCS service](https://docs.snowflake.com/en/sql-reference/sql/create-service) | `WRITEBACK_SERVICE` |
+| [SQL function](https://docs.snowflake.com/en/developer-guide/snowpark-container-services/working-with-services#service-functions) | `ROUTE_WRITEBACK_WRITEBACK(VARIANT)` |
 
 ---
 
@@ -75,6 +88,15 @@ GRANT USAGE ON SCHEMA <DB>.<SCHEMA> TO ROLE <SERVICE_ROLE>;
 GRANT CREATE SERVICE ON SCHEMA <DB>.<SCHEMA> TO ROLE <SERVICE_ROLE>;
 ```
 
+The service also needs access to the writeback target database/schema and warehouse:
+
+```sql
+-- Writeback target grants (so the container can CALL the stored procedures)
+GRANT USAGE ON DATABASE <WRITEBACK_DB> TO ROLE <SERVICE_ROLE>;
+GRANT USAGE ON SCHEMA <WRITEBACK_DB>.<WRITEBACK_SCHEMA> TO ROLE <SERVICE_ROLE>;
+GRANT USAGE ON WAREHOUSE <WRITEBACK_WAREHOUSE> TO ROLE <SERVICE_ROLE>;
+```
+
 The deployment scripts automatically grant the rest:
 
 ```sql
@@ -88,7 +110,7 @@ GRANT READ ON SECRET <DB>.<SCHEMA>.<NAME>_API_TOKEN TO ROLE <SERVICE_ROLE>;
 GRANT USAGE ON INTEGRATION <NAME>_API_ACCESS_INTEGRATION TO ROLE <SERVICE_ROLE>;
 -- Granted by step_09 (BIND goes to ROLE so it can create the function on the service):
 GRANT BIND SERVICE ENDPOINT ON SERVICE <DB>.<SCHEMA>.<NAME>_SERVICE TO ROLE <ROLE>;
-GRANT USAGE ON FUNCTION <DB>.<SCHEMA>.FETCH_<NAME>_RESPONSE(VARIANT) TO ROLE <SERVICE_ROLE>;
+GRANT USAGE ON FUNCTION <DB>.<SCHEMA>.ROUTE_<NAME>_WRITEBACK(VARIANT) TO ROLE <SERVICE_ROLE>;
 ```
 
 ---
@@ -98,8 +120,8 @@ GRANT USAGE ON FUNCTION <DB>.<SCHEMA>.FETCH_<NAME>_RESPONSE(VARIANT) TO ROLE <SE
 ```
 spcs_deployment_example/
 ├── app/
-│   ├── main.py                  Flask proxy service (generic)
-│   └── requirements.txt         Python dependencies
+│   ├── main.py                  FastAPI writeback route function
+│   └── requirements.txt         Python dependencies (FastAPI, Uvicorn, snowflake-connector-python)
 ├── scripts/
 │   ├── config.ps1               Shared config - prompts, logging, helpers
 │   ├── deploy_all.ps1           Full deployment orchestrator (10 steps)
@@ -114,7 +136,7 @@ spcs_deployment_example/
 │   ├── step_08_service.ps1      Create SPCS service (runs as SERVICE_ROLE)
 │   ├── step_09_function.ps1     Create SQL function + grant to SERVICE_ROLE
 │   └── step_10_test.ps1         Run connectivity + batch tests
-├── Dockerfile                   Container build definition
+├── Dockerfile                   Container build definition (Uvicorn on port 8000)
 ├── logs/                        Deployment logs (git-ignored)
 ├── service_spec.template.yaml   Service spec template (edit this for customization)
 ├── service.yaml                 Generated by step_08 (resolved, for troubleshooting)
@@ -135,7 +157,8 @@ spcs_deployment_example/
    - `ACCOUNTADMIN` role (for creating the external access integration)
    - A **service role** that the SPCS service will run as (see Role Model above)
    - SPCS enabled on your account
-4. **API bearer token** (or use the dummy value for testing)
+4. **Writeback stored procedures** (`USP_WRITEBACK_GROUP1` through `USP_WRITEBACK_GROUP4`)
+   already created in the target database/schema
 
 ---
 
@@ -160,15 +183,18 @@ The scripts validate the Snowflake connection first, then prompt for configurati
 Snowflake CLI connection name [default]: myconn
 ==> Testing connection 'myconn'...
     [OK] Connection 'myconn' is valid
-Service name (used for all object names) [my_service]: pricing
+Service name (used for all object names) [my_service]: writeback
 Database name [ADMIN_DB]:
 Schema name [PUBLIC]:
 Deployment role [SYSADMIN]:
 Admin role for integrations [ACCOUNTADMIN]:
 Docker image tag [latest]:
-Allowed egress hosts (comma-separated) [postman-echo.com]: api.example.com
-Service role (the role the SPCS service runs as) [PRICING_ROLE]:
-API bearer token [dummy-token-for-testing]:
+Allowed egress hosts (comma-separated) [postman-echo.com]:
+Service role (the role the SPCS service runs as) [WRITEBACK_ROLE]:
+Writeback target database [ADMIN_DB]: MY_DB
+Writeback target schema [PUBLIC]: MY_SCHEMA
+Writeback warehouse [WH_XS]:
+Enable debug logging in the service (true/false) [false]:
 ```
 
 If a connection name is invalid, the scripts show available connections and
@@ -182,21 +208,25 @@ Set any of these before running to skip the corresponding prompt:
 |---|---|---|
 | `SNOWFLAKE_CONNECTION` | `default` | Snowflake CLI connection name (validated on start) |
 | `SERVICE_NAME` | `my_service` | Base name for all Snowflake objects (letters, digits, underscores only) |
-| `DB` | `ADMIN_DB` | Database where objects are created |
-| `SCHEMA` | `PUBLIC` | Schema where objects are created |
+| `DB` | `ADMIN_DB` | Database where SPCS objects are created |
+| `SCHEMA` | `PUBLIC` | Schema where SPCS objects are created |
 | `ROLE` | `SYSADMIN` | Deployment role -- creates infrastructure objects |
 | `ADMIN_ROLE` | `ACCOUNTADMIN` | Admin role -- creates external access integration |
 | `IMAGE_TAG` | `latest` | Docker image tag pushed to Snowflake registry |
 | `TARGET_HOSTS` | `postman-echo.com` | Comma-separated hosts the container can reach (network rule) |
 | `SERVICE_ROLE` | `<NAME>_ROLE` | Pre-existing role the SPCS service runs as |
-| `API_SECRET` | `dummy-token-for-testing` | API bearer token stored as a Snowflake secret |
+| `WRITEBACK_DB_NAME` | Same as `DB` | Database containing the writeback stored procedures |
+| `WRITEBACK_SCHEMA_NAME` | Same as `SCHEMA` | Schema containing the writeback stored procedures |
+| `WRITEBACK_WAREHOUSE` | `WH_XS` | Warehouse used for writeback procedure calls |
+| `DEBUG_MODE` | `false` | Set to `true` to enable verbose debug logging in the container |
 
 ```powershell
 $env:SNOWFLAKE_CONNECTION = "myconn"
-$env:SERVICE_NAME = "pricing"
-$env:TARGET_HOSTS = "api.example.com"
-$env:SERVICE_ROLE = "PRICING_ROLE"
-$env:API_SECRET = "your-real-token"
+$env:SERVICE_NAME = "writeback"
+$env:SERVICE_ROLE = "WRITEBACK_ROLE"
+$env:WRITEBACK_DB_NAME = "MY_DB"
+$env:WRITEBACK_SCHEMA_NAME = "MY_SCHEMA"
+$env:WRITEBACK_WAREHOUSE = "WH_XS"
 .\scripts\deploy_all.ps1
 ```
 
@@ -243,44 +273,30 @@ the PowerShell scripts. Available placeholders:
 | `{{IMAGE}}` | Full image path (registry/db/schema/repo/image:tag) |
 | `{{DB}}` | Database name |
 | `{{SCHEMA}}` | Schema name |
-| `{{SECRET_NAME}}` | Secret object name (e.g. `PRICING_API_TOKEN`) |
-| `{{ENDPOINT_NAME}}` | Endpoint name and Flask route path (default: `proxy`) |
-| `{{CONTAINER_NAME}}` | Container name (derived from service name, e.g. `pricing`) |
-
-Here are the values you're most likely to change:
+| `{{ENDPOINT_NAME}}` | Endpoint name and FastAPI route path (default: `route`) |
+| `{{CONTAINER_NAME}}` | Container name (derived from service name, e.g. `writeback`) |
+| `{{WRITEBACK_DB_NAME}}` | Database containing the writeback stored procedures |
+| `{{WRITEBACK_SCHEMA_NAME}}` | Schema containing the writeback stored procedures |
+| `{{WRITEBACK_WAREHOUSE}}` | Warehouse used for writeback procedure calls |
+| `{{DEBUG_MODE}}` | `true` or `false` for verbose logging |
 
 ### Container environment variables
 
 The container reads these env vars at startup (defined in `app/main.py`):
 
-| Env var | Set in spec | Default | Description |
+| Env var | Set in spec | Required | Description |
 |---|---|---|---|
-| `TARGET_URL` | Yes | `https://postman-echo.com/post` | The external API URL the proxy calls. **Change this to your real API endpoint.** |
-| `REQUEST_TIMEOUT_S` | Yes | `30` | Per-request timeout in seconds. Must be less than the Gunicorn `--timeout` (60s in Dockerfile). If you increase this beyond 60, also increase the Gunicorn timeout. |
-| `API_TOKEN` | Via secret | *(required)* | Bearer token injected from the Snowflake secret |
-| `API_HEADER_KEY` | No (optional) | *(empty)* | Extra header value (e.g. `ocp-apim-subscription-key` for Azure APIM) |
-
-To change `TARGET_URL`, edit `service_spec.template.yaml`:
-
-```yaml
-env:
-  TARGET_URL: "https://your-api.example.com/v1/predict"   # <-- change this
-  REQUEST_TIMEOUT_S: "30"
-```
-
-To add `API_HEADER_KEY`, add it under `env:` in the template:
-
-```yaml
-env:
-  TARGET_URL: "https://your-api.example.com/v1/predict"
-  REQUEST_TIMEOUT_S: "30"
-  API_HEADER_KEY: "your-subscription-key"                  # <-- add this
-```
+| `SNOWFLAKE_HOST` | Auto (SPCS) | Yes | Injected by SPCS automatically |
+| `SNOWFLAKE_ACCOUNT` | Auto (SPCS) | Yes | Injected by SPCS automatically |
+| `WRITEBACK_DB_NAME` | Yes | Yes | Database where writeback procedures live |
+| `WRITEBACK_SCHEMA_NAME` | Yes | Yes | Schema where writeback procedures live |
+| `WRITEBACK_WAREHOUSE` | Yes | Yes | Warehouse for procedure execution |
+| `DEBUG_MODE` | Yes | No | Set to `true` for verbose logging (default: `false`) |
 
 ### Resource limits
 
 The default spec requests 0.5 CPU / 512 Mi memory with limits of 1 CPU / 1 Gi.
-Adjust based on your API call volume:
+Adjust based on your call volume:
 
 ```yaml
 resources:
@@ -299,7 +315,7 @@ routing traffic. The defaults work for most cases:
 
 ```yaml
 readinessProbe:
-  port: 8080
+  port: 8000
   path: /
 ```
 
@@ -311,8 +327,8 @@ ingress URL:
 
 ```yaml
 endpoints:
-  - name: proxy              # matches ENDPOINT_NAME in config.ps1
-    port: 8080
+  - name: route              # matches ENDPOINT_NAME in config.ps1
+    port: 8000
     public: true     # generates an ingress URL accessible outside Snowflake
 ```
 
@@ -321,35 +337,33 @@ endpoints:
 The spec uses two separate names:
 
 - **`CONTAINER_NAME`** -- the container name in the spec (derived from `SERVICE_NAME`,
-  e.g. `pricing`). Used by `SYSTEM$GET_SERVICE_LOGS` to identify the container.
-- **`ENDPOINT_NAME`** -- the endpoint name in the spec (default: `proxy`). Used by
+  e.g. `writeback`). Used by `SYSTEM$GET_SERVICE_LOGS` to identify the container.
+- **`ENDPOINT_NAME`** -- the endpoint name in the spec (default: `route`). Used by
   step 09 in `CREATE FUNCTION ... ENDPOINT = '<name>' AS '/<name>'`.
 
-If you change `ENDPOINT_NAME`, the Flask route in `app/main.py` must match. For
-example, if you set `ENDPOINT_NAME = "predict"`, update the route:
+If you change `ENDPOINT_NAME`, the FastAPI route in `app/main.py` must match. For
+example, if you set `ENDPOINT_NAME = "dispatch"`, update the route:
 
 ```python
-@app.post("/predict")     # must match ENDPOINT_NAME
-def proxy_request():
+@app.post("/dispatch")     # must match ENDPOINT_NAME
+async def route(request: Request):
 ```
 
 ### Full generated spec (example)
 
-After running step 08 with `SERVICE_NAME=pricing`, the generated `service.yaml`
+After running step 08 with `SERVICE_NAME=writeback`, the generated `service.yaml`
 looks like:
 
 ```yaml
 spec:
   containers:
-    - name: pricing
-      image: <account>.registry.snowflakecomputing.com/<db>/<schema>/pricing_repo/pricing_service:latest
+    - name: writeback
+      image: <account>.registry.snowflakecomputing.com/<db>/<schema>/writeback_repo/writeback_service:latest
       env:
-        TARGET_URL: "https://postman-echo.com/post"
-        REQUEST_TIMEOUT_S: "30"
-      secrets:
-        - snowflakeSecret:
-            objectName: ADMIN_DB.PUBLIC.PRICING_API_TOKEN
-          envVarName: API_TOKEN
+        WRITEBACK_DB_NAME: "MY_DB"
+        WRITEBACK_SCHEMA_NAME: "MY_SCHEMA"
+        WRITEBACK_WAREHOUSE: "WH_XS"
+        DEBUG_MODE: "false"
       resources:
         requests:
           cpu: "0.5"
@@ -358,11 +372,11 @@ spec:
           cpu: "1"
           memory: 1Gi
       readinessProbe:
-        port: 8080
+        port: 8000
         path: /
   endpoints:
-    - name: proxy
-      port: 8080
+    - name: route
+      port: 8000
       public: false
 ```
 
@@ -372,7 +386,7 @@ Step 08 uses `CREATE SERVICE IF NOT EXISTS`, so re-running it won't update an
 existing service. To apply spec changes to a running service:
 
 ```sql
-ALTER SERVICE ADMIN_DB.PUBLIC.PRICING_SERVICE
+ALTER SERVICE ADMIN_DB.PUBLIC.WRITEBACK_SERVICE
   FROM SPECIFICATION $$ <paste updated spec here> $$;
 ```
 
@@ -380,7 +394,6 @@ Or drop and recreate:
 
 ```powershell
 # Drop the service first (step 08 uses IF NOT EXISTS, so it won't update in-place)
-# Replace the values with your actual config
 snow sql --connection $env:SNOWFLAKE_CONNECTION --query "USE ROLE $env:SERVICE_ROLE; DROP SERVICE IF EXISTS $env:DB.$env:SCHEMA.${env:SERVICE_NAME}_SERVICE;"
 # Then re-run step 08
 .\scripts\step_08_service.ps1
@@ -390,17 +403,45 @@ See [ALTER SERVICE](https://docs.snowflake.com/en/sql-reference/sql/alter-servic
 
 ---
 
+## Debug Mode
+
+Set `DEBUG_MODE=true` in the service spec (or via the `DEBUG_MODE` config prompt)
+to enable verbose logging. This is useful for troubleshooting dispatch failures,
+connection issues, or unexpected behavior.
+
+| Area | INFO (default) | DEBUG (verbose) |
+|---|---|---|
+| Startup | Config values (host, db, schema, warehouse) | + "DEBUG_MODE is ON" banner |
+| Token cache | Silent | Logs each token refresh with file path and token length |
+| Connection | Silent | Logs open/established events with host, db, schema, session_id |
+| Dispatch | Procedure name, IDs, status, elapsed_ms | + Full payload before CALL, full procedure result after |
+| Request | Row count per batch | + Full request body |
+| Errors | Stack trace + IDs + elapsed_ms | Same (already verbose at INFO level) |
+
+To enable on a running service, update the spec:
+
+```sql
+ALTER SERVICE ADMIN_DB.PUBLIC.WRITEBACK_SERVICE
+  FROM SPECIFICATION $$
+    -- same spec but with DEBUG_MODE: "true"
+  $$;
+```
+
+To turn it off, set `DEBUG_MODE: "false"` and alter the service again.
+
+---
+
 ## Monitoring and Debugging
 
 ```sql
 -- Container logs (third argument is the container name, not the endpoint)
-CALL SYSTEM$GET_SERVICE_LOGS('ADMIN_DB.PUBLIC.PRICING_SERVICE', '0', 'pricing', 100);
+CALL SYSTEM$GET_SERVICE_LOGS('ADMIN_DB.PUBLIC.WRITEBACK_SERVICE', '0', 'writeback', 100);
 
 -- Service health
-CALL SYSTEM$GET_SERVICE_STATUS('ADMIN_DB.PUBLIC.PRICING_SERVICE');
+CALL SYSTEM$GET_SERVICE_STATUS('ADMIN_DB.PUBLIC.WRITEBACK_SERVICE');
 
 -- Compute pool status
-DESCRIBE COMPUTE POOL PRICING_COMPUTE_POOL;
+DESCRIBE COMPUTE POOL WRITEBACK_COMPUTE_POOL;
 ```
 
 See [Working with services](https://docs.snowflake.com/en/developer-guide/snowpark-container-services/working-with-services)
@@ -420,7 +461,10 @@ actually running.
 | `ERROR: Connection '...' failed` | Wrong connection name or expired credentials | Run `snow connection list` to see valid names; re-authenticate if needed |
 | `Pool did not reach ACTIVE within 5 minutes` | Compute pool slow to provision | Re-run step 02; it will detect the pool and resume waiting |
 | `Service not READY within 3 minutes` | Container crash or bad image | Check logs: `CALL SYSTEM$GET_SERVICE_LOGS(...)` (see Monitoring above) |
+| Container crashes on startup | Missing env vars (`WRITEBACK_DB_NAME`, etc.) | Verify the service spec has all required env vars set |
 | `Insufficient privileges` on CREATE SERVICE | SERVICE_ROLE missing grants | Run the [prerequisite grants](#role-model) listed in the Role Model section |
+| Dispatch returns ACCEPTED but procedure never runs | Daemon thread lost on container restart | Check logs for exceptions; consider retry logic or persistent queue |
+| `Unrecognized productCode` | Product code not in routing table | Add the code to `PRODUCT_TO_PROCEDURE` in `app/main.py` |
 | Step fails but `deploy_all` continues | Stale `$LASTEXITCODE` | Re-run the individual step script to see the actual error |
 | `ERROR: SERVICE_NAME must contain only letters...` | Hyphens or spaces in name | Use only `A-Z`, `a-z`, `0-9`, `_` (e.g. `my_service`, not `my-service`) |
 | Docker build fails with `no matching manifest for linux/amd64` | Base image doesn't support amd64 | Ensure Docker buildx is installed: `docker buildx version` |
@@ -443,14 +487,14 @@ assumed to be managed separately).
 
 ---
 
-## Logging
+## Deployment Logging
 
 Every SQL command, Docker operation, and exit code is automatically logged to
 `logs/deploy_<service>_<timestamp>.log`. The log file path is printed at the
 start of each run.
 
 Logs include:
-- Full configuration block (service name, connection, roles, derived names)
+- Full configuration block (service name, connection, roles, writeback targets, debug mode)
 - Every SQL statement with timestamp (secret values are masked)
 - Exit codes and error messages
 - Docker build/push commands
