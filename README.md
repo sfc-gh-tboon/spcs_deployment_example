@@ -136,6 +136,11 @@ spcs_deployment_example/
 │   ├── step_08_service.ps1      Create SPCS service (runs as SERVICE_ROLE)
 │   ├── step_09_function.ps1     Create SQL function + grant to SERVICE_ROLE
 │   └── step_10_test.ps1         Run connectivity + batch tests
+├── scripts/sh/                      Bash equivalents for macOS / Linux
+│   ├── config.sh                Same config + helpers (requires jq)
+│   ├── deploy_all.sh            Full deployment orchestrator
+│   ├── cleanup.sh               Teardown all objects
+│   └── step_01..step_10_*.sh    Same steps as PowerShell versions
 ├── Dockerfile                   Container build definition (Uvicorn on port 8000)
 ├── logs/                        Deployment logs (git-ignored)
 ├── service_spec.template.yaml   Service spec template (edit this for customization)
@@ -159,10 +164,15 @@ spcs_deployment_example/
    - SPCS enabled on your account
 4. **Writeback stored procedures** (`USP_WRITEBACK_GROUP1` through `USP_WRITEBACK_GROUP4`)
    already created in the target database/schema
+5. **jq** (macOS/Linux only, for the bash scripts):
+   - macOS: `brew install jq`
+   - Linux: `apt install jq`
 
 ---
 
 ## Quick Start
+
+### Windows (PowerShell)
 
 Run from the **project root directory**:
 
@@ -175,6 +185,19 @@ Individual steps can also be run standalone:
 
 ```powershell
 .\scripts\step_03_network_rule.ps1
+```
+
+### macOS / Linux (Bash)
+
+```bash
+cd path/to/spcs_deployment_example
+./scripts/sh/deploy_all.sh
+```
+
+Individual steps:
+
+```bash
+./scripts/sh/step_03_network_rule.sh
 ```
 
 The scripts validate the Snowflake connection first, then prompt for configuration:
@@ -228,6 +251,18 @@ $env:WRITEBACK_DB_NAME = "MY_DB"
 $env:WRITEBACK_SCHEMA_NAME = "MY_SCHEMA"
 $env:WRITEBACK_WAREHOUSE = "WH_XS"
 .\scripts\deploy_all.ps1
+```
+
+Or on macOS/Linux:
+
+```bash
+export SNOWFLAKE_CONNECTION="myconn"
+export SERVICE_NAME="writeback"
+export SERVICE_ROLE="WRITEBACK_ROLE"
+export WRITEBACK_DB_NAME="MY_DB"
+export WRITEBACK_SCHEMA_NAME="MY_SCHEMA"
+export WRITEBACK_WAREHOUSE="WH_XS"
+./scripts/sh/deploy_all.sh
 ```
 
 ---
@@ -506,6 +541,12 @@ For any other issue, check the deployment log file at `logs/deploy_<service>_<ti
 
 ```powershell
 .\scripts\cleanup.ps1
+```
+
+Or on macOS/Linux:
+
+```bash
+./scripts/sh/cleanup.sh
 ```
 
 Prompts for the service name and connection, confirms with YES, then drops all
