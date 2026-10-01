@@ -1,0 +1,18 @@
+# Logs
+logs/
+
+# Generated service spec (contains account-specific values)
+service.yaml
+
+# Snowflake CLI
+.snowflake/
+
+# Python
+__pycache__/
+*.pyc
+
+# Environment
+.env
+
+# macOS
+.DS_Store

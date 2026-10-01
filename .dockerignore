@@ -1,0 +1,13 @@
+.git
+__pycache__
+*.pyc
+*.log
+scripts/
+logs/
+.snowflake/
+.env
+.gitignore
+.dockerignore
+README.md
+service.yaml
+service_spec.template.yaml

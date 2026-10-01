@@ -1,0 +1,43 @@
+# SPCS Service Specification Template
+# ====================================
+# This file is read by step_08_service.ps1 at deployment time.
+# Placeholders ({{...}}) are replaced automatically with values from config.ps1.
+#
+# To customize: edit this file directly. The deployment script will substitute
+# the placeholders and pass the resolved spec to CREATE SERVICE.
+#
+# Available placeholders:
+#   {{IMAGE}}        - Full image path (registry/db/schema/repo/image:tag)
+#   {{DB}}           - Database name
+#   {{SCHEMA}}       - Schema name
+#   {{SECRET_NAME}}  - Secret object name (e.g. PRICING_API_TOKEN)
+#   {{CONTAINER_NAME}} - Container name (derived from service name, e.g. pricing)
+#   {{ENDPOINT_NAME}}  - Endpoint name and Flask route path (default: proxy)
+#
+# After deployment, the resolved spec is saved to service.yaml for reference.
+
+spec:
+  containers:
+    - name: "{{CONTAINER_NAME}}"
+      image: "{{IMAGE}}"
+      env:
+        TARGET_URL: "https://postman-echo.com/post"
+        REQUEST_TIMEOUT_S: "30"
+      secrets:
+        - snowflakeSecret:
+            objectName: "{{DB}}.{{SCHEMA}}.{{SECRET_NAME}}"
+          envVarName: API_TOKEN
+      resources:
+        requests:
+          cpu: "0.5"
+          memory: 512Mi
+        limits:
+          cpu: "1"
+          memory: 1Gi
+      readinessProbe:
+        port: 8080
+        path: /
+  endpoints:
+    - name: "{{ENDPOINT_NAME}}"
+      port: 8080
+      public: false
