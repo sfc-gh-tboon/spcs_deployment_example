@@ -28,7 +28,10 @@ WORKDIR /app
 COPY app/ .
 
 # Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --trusted-host pypi.org \
+                --trusted-host pypi.python.org \
+                --trusted-host files.pythonhosted.org \
+                -r requirements.txt
 
 # Switch to non-root before starting the process
 USER appuser

@@ -22,7 +22,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Colors
 RED='\033[0;31m'
@@ -183,8 +183,8 @@ invoke_snow_sql() {
         return 1
     fi
 
-    # Check for errors
-    if echo "$output" | grep -qi "error\|SQL compilation"; then
+    # Check for errors (match snow CLI error prefixes, not JSON field names like "error_code")
+    if echo "$output" | grep -qE "^╭─ Error|SQL compilation error|ERROR:|Error:"; then
         write_log "SQL ERROR (exit=$exit_code): $(echo "$output" | head -5)"
         return 1
     fi
